@@ -15,6 +15,10 @@ wiring layout).
 
 ## Hardware
 
+![Ring map: the panel's 8 concentric rings and center dot, showing each ring's LED count, assigned role, and an example lit state](docs/ring-map.svg)
+
+*Fig. 1 — wiring order runs outer to inner (index 0 lands on the same spoke on every ring). Illustrated at 10:09:24, September 13 — not live data.*
+
 - **MCU**: ESP32-WROOM-32 DevKitC-style dev board (30-pin, no PSRAM)
 - **LED panel**: WS2812B (5050 RGB) addressable LED ring panel, 241 pixels
   total, arranged as **8 concentric rings + 1 center dot**, wired outer to

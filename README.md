@@ -2,10 +2,12 @@
 
 An analog-style clock rendered on a 241-LED WS2812B concentric-ring panel,
 driven by an ESP32. Hour, minute, and second "hands" are drawn as single
-LEDs on dedicated rings, with a decorative gradient spinner sweeping the
-remaining rings and finishing at the center dot. WiFi and timezone are
-configured from a phone via a captive portal, time is kept via NTP, and
-colors/brightness are adjustable live from a web page.
+LEDs sweeping continuously around dedicated rings, while month, day-of-month,
+and a 24-hour weather forecast are drawn as fixed integer steps on three more
+rings — intended to line up with printed numbers on a 3D-printed bezel. WiFi
+and timezone are configured from a phone via a captive portal, time is kept
+via NTP, weather comes from a free API, and colors/brightness/location are
+adjustable live from a web page.
 
 See [`TRANSCRIPT.md`](TRANSCRIPT.md) for the full story of how this was
 built (including the hardware detective work to figure out the panel's
@@ -19,22 +21,27 @@ wiring layout).
   inner as a single data chain (each ring fully traversed before the chain
   continues to the next ring inward):
 
-  | Ring            | LEDs | Role                                    |
-  |-----------------|-----:|------------------------------------------|
-  | 1 (outermost)   | 60   | Second hand                              |
-  | 2               | 48   | Spinner (gradient sweep)                 |
-  | 3               | 40   | Minute hand                              |
-  | 4               | 32   | Spinner                                  |
-  | 5               | 24   | Hour hand                                |
-  | 6               | 16   | Spinner                                  |
-  | 7               | 12   | Spinner                                  |
-  | 8 (innermost)   | 8    | Spinner                                  |
-  | Center          | 1    | Spinner (final stop)                     |
-  | **Total**       | **241** |                                       |
+  | Ring            | LEDs | Role                    | Mode                        |
+  |-----------------|-----:|--------------------------|------------------------------|
+  | 1 (outermost)   | 60   | Second hand              | Continuous sweep             |
+  | 2               | 48   | Hour hand                | Continuous sweep             |
+  | 3               | 40   | Minute hand              | Continuous sweep             |
+  | 4               | 32   | Day of month             | Discrete step (31/32 used)   |
+  | 5               | 24   | 24-hour weather forecast | Data-driven, 1 hour/LED      |
+  | 6               | 16   | *unused*                 | —                             |
+  | 7               | 12   | Month                    | Discrete step (12/12 used)   |
+  | 8 (innermost)   | 8    | *unused*                 | —                             |
+  | Center          | 1    | Heartbeat                | Pulses once per second       |
+  | **Total**       | **241** |                       |                               |
 
   Ring 1 being exactly 60 LEDs gives the second hand a satisfying 1:1
-  mapping, though the firmware actually renders it (and every hand) as a
-  continuous sub-pixel position, not a fixed 60-step tick.
+  mapping, though the hands actually render as a continuous sub-pixel
+  position, not a fixed step. Month and day, by contrast, are rendered as
+  an **exact integer LED index** with no anti-aliasing — ring 7 (12 LEDs)
+  is an exact fit for the months, and ring 4 (32 LEDs) is the closest fit
+  for day-of-month (index 31, the 32nd LED, simply never lights). This
+  matters if you're 3D-printing a bezel with fixed printed numbers: each
+  step must land on the same physical LED every time.
 
 ## Wiring
 
@@ -69,8 +76,13 @@ Arduino framework). Key dependencies (see `platformio.ini`):
 - [FastLED](https://github.com/FastLED/FastLED) — LED driving
 - [WiFiManager](https://github.com/tzapu/WiFiManager) — captive-portal WiFi
   + timezone setup
-- ESP32 Arduino core's built-in `WebServer` + `ESPmDNS` — the live config
-  web UI
+- [ArduinoJson](https://arduinojson.org/) — parsing the weather API response
+- ESP32 Arduino core's built-in `WebServer`, `ESPmDNS`, `HTTPClient` +
+  `WiFiClientSecure` — the live config web UI and weather fetch
+
+Weather comes from [Open-Meteo](https://open-meteo.com/) (free, no API key)
+based on the latitude/longitude set in the web UI, refreshed every 15
+minutes or immediately when the location is changed.
 
 ### Build & flash
 
@@ -99,9 +111,9 @@ Once on your network, browse to **`http://ledclock.local/`** (or the
 device's IP, printed over serial at boot) for a page to set:
 
 - Hour, minute, and second hand colors
-- Spinner color gradient (start / mid / end)
-- Hand brightness
-- Spinner brightness (start / end, interpolated across the sweep)
+- Month and day indicator colors
+- Brightness (applied to all of the above)
+- Weather latitude/longitude
 
 Settings are saved to flash (NVS) and persist across reboots.
 

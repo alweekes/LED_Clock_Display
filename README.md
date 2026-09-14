@@ -75,7 +75,11 @@ Notes:
 ## Firmware
 
 Built with [PlatformIO](https://platformio.org/) (`esp32dev` board,
-Arduino framework). Key dependencies (see `platformio.ini`):
+Arduino framework). `src/main.cpp` is commented throughout for readers new
+to Arduino/ESP32 development — it explains the ring-indexing math, the
+WiFiManager/captive-portal flow, NVS persistence, and the weather
+HTTP/JSON fetch as it goes, not just what each line does but why. Key
+dependencies (see `platformio.ini`):
 
 - [FastLED](https://github.com/FastLED/FastLED) — LED driving
 - [WiFiManager](https://github.com/tzapu/WiFiManager) — captive-portal WiFi
@@ -127,5 +131,8 @@ Settings are saved to flash (NVS) and persist across reboots.
 src/main.cpp       Firmware (rendering, WiFi/NTP setup, web UI)
 platformio.ini     PlatformIO project/board/library configuration
 docs/              Reference material collected during the build
-TRANSCRIPT.md       Condensed chat transcript of the build process
+TRANSCRIPT.md      Condensed chat transcript of the build process
+CHANGELOG.md       What changed in each release
 ```
+
+See [`CHANGELOG.md`](CHANGELOG.md) for release notes.

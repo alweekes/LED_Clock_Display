@@ -122,6 +122,27 @@ Brightness of each hour's LED is separate — scaled by that hour's chance of
 rain, so a bright rain-colored LED means "raining and confident," a dim one
 means low confidence either way.
 
+The temperature gauge (ring 8) works differently: each LED's color is fixed
+by its position in a blue-to-red gradient and never changes, while the
+*count* of lit LEDs shows the current reading — a bar-fill, not a single
+moving indicator. The gauge spans -5&deg;C to 35&deg;C (~5&deg;C per LED,
+see `TEMP_GAUGE_MIN_C`/`TEMP_GAUGE_MAX_C` in `src/main.cpp`); it's a fill
+gauge, so a given LED is only lit once every LED before it (colder) is also
+lit:
+
+| LED (cold end &rarr; hot end) | Color                | Lit once temperature reaches |
+|---:|-----------------------|------:|
+| 0  | `#0050FF` blue         | -5&deg;C (always lit above the gauge floor) |
+| 1  | `#2449DB`               | -2.5&deg;C |
+| 2  | `#4942B6`               | 2.5&deg;C  |
+| 3  | `#6D3B92`               | 7.5&deg;C  |
+| 4  | `#92336D`               | 12.5&deg;C |
+| 5  | `#B62C49`               | 17.5&deg;C |
+| 6  | `#DB2524`               | 22.5&deg;C |
+| 7  | `#FF1E00` red           | 27.5&deg;C |
+
+Below -5&deg;C no LEDs light; at or above 35&deg;C all 8 are lit.
+
 ### Build & flash
 
 ```

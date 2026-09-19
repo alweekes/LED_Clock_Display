@@ -12,10 +12,14 @@
 //      lights exactly one LED on each of three rings to represent them.
 //   3. Lights one LED on another ring to show the current month, and one on
 //      another ring to show the day of the month.
-//   4. Lights up to 24 LEDs on one ring to show the next 24 hours of
-//      weather forecast (fetched from the internet every 15 minutes).
-//   5. Pulses the single center LED once a second, like a heartbeat.
-//   6. Sends all 241 colors down one wire to the LED panel.
+//   4. Lights up to 24 LEDs on one ring to show today's weather forecast,
+//      one fixed LED per hour of the day (fetched from the internet every
+//      15 minutes), plus a separate pointer on another ring showing which
+//      of those 24 hours is right now.
+//   5. Fills part of an 8-LED ring, like a thermometer, to show the current
+//      temperature.
+//   6. Pulses the single center LED once a second, like a heartbeat.
+//   7. Sends all 241 colors down one wire to the LED panel.
 //
 // It also runs a tiny web server so you can open a page in your browser and
 // change the colors/brightness without re-uploading the firmware, and it
@@ -124,27 +128,54 @@ const RingDef ALL_RINGS[8] = {
 // LED, which looks fine on a plain, unmarked ring since there's nothing for
 // a slightly-off position to visibly misalign with.
 //
-// Month/day/forecast are different: they're *discrete step indicators*,
-// meant to eventually sit behind a 3D-printed bezel with actual numbers
-// printed on it (e.g. "1" through "31" around the day ring). For that to
-// work, LED number 5 must ALWAYS be exactly where "day 6" is printed --
-// there's no room for the continuous-sweep rounding-to-nearest-LED approach,
-// so these use a plain integer index instead (see drawStep() below).
+// Month and day are *discrete step indicators*, meant to eventually sit
+// behind a 3D-printed bezel with actual numbers printed on it (e.g. "1"
+// through "31" around the day ring). For that to work, LED number 5 must
+// ALWAYS be exactly where "day 6" is printed -- there's no room for the
+// continuous-sweep rounding-to-nearest-LED approach, so these use a plain
+// integer index instead (see drawStep() below).
 //
-//   Ring 5 (24 LEDs) is an exact 1-LED-per-hour fit for a 24-hour weather
-//   forecast, so the hour hand (happy on any ring size) moved to ring 2
-//   (48 LEDs) to free ring 5 up for that.
+// The forecast ring is a third kind of thing: rather than "the next N hours
+// from now" (which would need its LEDs to keep moving as time passes, ruling
+// out any fixed printed labels), each of its 24 LEDs has a permanently fixed
+// meaning: LED 0 is midnight, LED 12 is noon, and so on -- a full day laid
+// out around the ring once, like a 24-hour clock face. That makes it
+// printable too: "12am, 2am, 4am...10pm" at every 2nd LED, always correct,
+// no matter what time it is.
+//
+// Since the forecast ring itself no longer moves, a separate hour-of-day
+// *pointer* -- a continuous sweep, same idea as the hour/minute/second
+// hands -- sits on the ring right next to it, showing where "right now"
+// falls on that fixed 24-hour dial. It deliberately isn't the same as the
+// (12-hour) hour hand, since 2am and 2pm need to look different here.
+//
+//   Ring 5 (24 LEDs) is an exact 1-LED-per-hour fit for the 24-hour
+//   forecast dial, so the hour hand (happy on any ring size) moved to
+//   ring 2 (48 LEDs) to free ring 5 up for it.
+//   Ring 6 (16 LEDs) hosts the new hour-of-day pointer, right next to the
+//   forecast ring it points at.
 //   Ring 7 (12 LEDs) is an exact fit for the 12 months of the year.
 //   Ring 4 (32 LEDs) is the closest fit for day-of-month (which needs 31
 //   positions); the 32nd LED position is simply never lit, since there's
 //   never a "day 32".
-// Rings 6 and 8 (16 and 8 LEDs) aren't assigned to anything yet.
+//
+// Ring 8 is a fourth kind of thing again: a coarse bar-graph gauge, like a
+// thermometer or a signal-strength icon. Rather than one LED meaning one
+// specific value, LEDs light up *from the start, one after another* as the
+// value increases -- so "5 of 8 lit" means "a bit over half of the gauge's
+// range", regardless of which 5 LEDs they happen to be. See the temperature
+// gauge code in renderClock() for the fill-count math.
+//   Ring 8 (8 LEDs) is the current temperature, filled blue (cold) to red
+//   (hot) across a fixed -5C to 35C range -- coarse (~5C per LED), but a
+//   quick glance answer to "is it cold out?".
 #define SECOND_HAND_RING 0  // ring1, 60 LEDs
 #define HOUR_HAND_RING 1    // ring2, 48 LEDs
 #define MINUTE_HAND_RING 2  // ring3, 40 LEDs
 #define DAY_RING 3          // ring4, 32 LEDs -- day of month, 31 positions used
-#define FORECAST_RING 4     // ring5, 24 LEDs -- next 24 hours' weather
+#define FORECAST_RING 4     // ring5, 24 LEDs -- fixed 24-hour-of-day weather dial
+#define HOUR_POINTER_RING 5 // ring6, 16 LEDs -- points at "now" on the forecast ring
 #define MONTH_RING 6        // ring7, 12 LEDs -- month, all 12 positions used
+#define TEMP_RING 7          // ring8, 8 LEDs -- current temperature gauge
 
 // `leds[]` is the array FastLED actually reads from to know what color to
 // send to each physical LED. Every function in this file that "turns on an
@@ -174,6 +205,7 @@ CRGB minuteColor(0, 150, 0);    // dim green
 CRGB secondColor(0, 60, 255);   // blue
 CRGB monthColor(200, 120, 0);   // amber
 CRGB dayColor(0, 150, 150);     // teal
+CRGB hourPointerColor(200, 200, 200);  // pale white
 uint8_t handBrightness = 255;
 float weatherLat = 51.5074;   // default: London
 float weatherLon = -0.1278;
@@ -224,6 +256,8 @@ void loadColorSettings() {
   secondColor = unpackColor(prefs.getUInt("secRGB", packColor(secondColor)));
   monthColor = unpackColor(prefs.getUInt("monRGB", packColor(monthColor)));
   dayColor = unpackColor(prefs.getUInt("dayRGB", packColor(dayColor)));
+  hourPointerColor =
+      unpackColor(prefs.getUInt("hpRGB", packColor(hourPointerColor)));
   handBrightness = prefs.getUChar("handBri", handBrightness);
   weatherLat = prefs.getFloat("wLat", weatherLat);
   weatherLon = prefs.getFloat("wLon", weatherLon);
@@ -239,6 +273,7 @@ void saveColorSettings() {
   prefs.putUInt("secRGB", packColor(secondColor));
   prefs.putUInt("monRGB", packColor(monthColor));
   prefs.putUInt("dayRGB", packColor(dayColor));
+  prefs.putUInt("hpRGB", packColor(hourPointerColor));
   prefs.putUChar("handBri", handBrightness);
   prefs.putFloat("wLat", weatherLat);
   prefs.putFloat("wLon", weatherLon);
@@ -280,6 +315,8 @@ button{margin-top:24px;width:100%;padding:12px;font-size:1em;background:#3a7;
 <input type="color" name="monthColor" value="%MONTH_COLOR%"></label>
 <label>Day indicator color
 <input type="color" name="dayColor" value="%DAY_COLOR%"></label>
+<label>Hour-of-day pointer color
+<input type="color" name="hourPointerColor" value="%HOUR_POINTER_COLOR%"></label>
 <label>Brightness
 <input type="range" name="handBrightness" min="0" max="255" value="%HAND_BRI%"></label>
 <label>Weather latitude
@@ -301,6 +338,7 @@ void handleRoot() {
   page.replace("%SECOND_COLOR%", colorToHex(secondColor));
   page.replace("%MONTH_COLOR%", colorToHex(monthColor));
   page.replace("%DAY_COLOR%", colorToHex(dayColor));
+  page.replace("%HOUR_POINTER_COLOR%", colorToHex(hourPointerColor));
   page.replace("%HAND_BRI%", String(handBrightness));
   page.replace("%WEATHER_LAT%", String(weatherLat, 4));
   page.replace("%WEATHER_LON%", String(weatherLon, 4));
@@ -323,6 +361,8 @@ void handleSave() {
   secondColor = hexToColor(webServer.arg("secondColor"), secondColor);
   monthColor = hexToColor(webServer.arg("monthColor"), monthColor);
   dayColor = hexToColor(webServer.arg("dayColor"), dayColor);
+  hourPointerColor =
+      hexToColor(webServer.arg("hourPointerColor"), hourPointerColor);
   handBrightness = (uint8_t)webServer.arg("handBrightness").toInt();
 
   float newLat = webServer.arg("weatherLat").toFloat();
@@ -444,8 +484,9 @@ void setupWiFi() {
 // -----------------------------------------------------------------------
 // Weather forecast
 // -----------------------------------------------------------------------
-// These two arrays hold the next 24 hours of forecast, one entry per
-// upcoming hour (index 0 = the current hour, index 23 = 23 hours from now).
+// These two arrays hold today's forecast, one entry per hour of the day --
+// index 0 is midnight, index 23 is 11pm, fixed regardless of what time it
+// currently is (see the big comment near FORECAST_RING above for why).
 // A weather code of -1 means "we don't have real data for this hour yet" --
 // either the board has only just booted and hasn't fetched anything, or the
 // last fetch attempt failed and we're still showing whatever was fetched
@@ -453,28 +494,43 @@ void setupWiFi() {
 #define FORECAST_HOURS 24
 int forecastWeatherCode[FORECAST_HOURS];
 int forecastPrecipProb[FORECAST_HOURS];  // % chance of rain, 0-100
+float forecastTempC[FORECAST_HOURS];     // degrees Celsius
 unsigned long lastWeatherFetch = 0;
 #define WEATHER_FETCH_INTERVAL_MS (15UL * 60UL * 1000UL)  // 15 minutes, in milliseconds
+
+// Range the temperature gauge (ring 8) covers -- outside this range, it just
+// shows fully empty or fully lit rather than a specific reading.
+#define TEMP_GAUGE_MIN_C -5.0f
+#define TEMP_GAUGE_MAX_C 35.0f
 
 // Turns a weather condition code from the forecast into a color for the
 // forecast ring. The codes themselves come from the WMO ("World
 // Meteorological Organization") weather code standard, which the Open-Meteo
 // API we use also follows -- see https://open-meteo.com/en/docs for the
-// full table. We only care about a handful of broad categories here.
+// full table.
+//
+// Deliberately a small set of maximally-different colors (rather than one
+// shade per WMO sub-category) so they stay easy to tell apart at a glance,
+// especially since brightness also varies with rain chance. Note "grey"
+// isn't one of them: an RGB LED has no way to render grey -- equal
+// red/green/blue just looks like dim white, which would be easy to mistake
+// for the (dimmed) snow color. Yellow, green, blue, white, and magenta are
+// all genuinely different hues (white being the one deliberately
+// colorless/achromatic option), so dimming any of them for a low rain
+// chance never makes two categories converge on the same look.
 CRGB weatherCodeColor(int code) {
-  if (code == 0) return CRGB(255, 170, 0);          // clear sky
-  if (code <= 3) return CRGB(140, 140, 150);        // partly cloudy/overcast
-  if (code == 45 || code == 48) return CRGB(170, 170, 170);  // fog
-  if (code >= 51 && code <= 57) return CRGB(80, 160, 255);   // drizzle
-  if (code >= 61 && code <= 67) return CRGB(30, 90, 255);    // rain
-  if (code >= 71 && code <= 77) return CRGB(220, 220, 255);  // snow
-  if (code >= 80 && code <= 82) return CRGB(30, 90, 255);    // rain showers
-  if (code >= 85 && code <= 86) return CRGB(220, 220, 255);  // snow showers
-  if (code >= 95) return CRGB(160, 0, 220);                  // thunderstorm
-  return CRGB(80, 80, 80);                                    // unrecognized code
+  if (code == 0) return CRGB(255, 215, 0);  // clear sky -- yellow
+  if (code <= 3 || code == 45 || code == 48)
+    return CRGB(0, 200, 60);  // cloudy/overcast/fog -- green
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
+    return CRGB(0, 102, 255);  // drizzle/rain/rain showers -- blue
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86))
+    return CRGB(255, 255, 255);  // snow/snow showers -- white
+  if (code >= 95) return CRGB(204, 0, 255);  // thunderstorm -- magenta
+  return CRGB(64, 64, 64);                    // unrecognized code -- dim grey
 }
 
-// Fetches the next 24 hours of forecast from Open-Meteo (a free weather API
+// Fetches today's 24-hour forecast from Open-Meteo (a free weather API
 // that, unusually, doesn't require signing up for an API key) for whatever
 // latitude/longitude is currently configured, and fills in the two arrays
 // above. If anything goes wrong along the way (no WiFi, the website doesn't
@@ -497,7 +553,8 @@ void fetchWeather() {
   char url[256];
   snprintf(url, sizeof(url),
            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
-           "&hourly=weathercode,precipitation_probability&forecast_days=2&timezone=auto",
+           "&hourly=weathercode,precipitation_probability,temperature_2m"
+           "&forecast_days=1&timezone=auto",
            weatherLat, weatherLon);
 
   if (!http.begin(client, url)) {
@@ -532,30 +589,26 @@ void fetchWeather() {
     return;
   }
 
-  // Reach into the parsed JSON for the two lists of numbers we actually
-  // need: one weather code and one rain-chance percentage per hour.
+  // Reach into the parsed JSON for the lists of numbers we actually need:
+  // one weather code, one rain-chance percentage, and one temperature per
+  // hour.
   JsonArray codes = doc["hourly"]["weathercode"];
   JsonArray precip = doc["hourly"]["precipitation_probability"];
-  if (codes.isNull() || precip.isNull()) {
+  JsonArray temps = doc["hourly"]["temperature_2m"];
+  if (codes.isNull() || precip.isNull() || temps.isNull()) {
     Serial.println("Weather: unexpected response shape");
     return;
   }
 
-  // We asked for "timezone=auto", so the API replies with hourly data
+  // We asked for "timezone=auto", so the API replies with 24 hourly entries
   // starting at local midnight of today, in the same timezone this clock is
-  // set to. That means "the current hour's forecast" is simply entry number
-  // `timeinfo.tm_hour` in that list (e.g. at 2pm, that's entry 14).
-  time_t nowSec = time(NULL);
-  struct tm timeinfo;
-  localtime_r(&nowSec, &timeinfo);
-  int startIdx = timeinfo.tm_hour;
-
-  for (int i = 0; i < FORECAST_HOURS; i++) {
-    int srcIdx = startIdx + i;
-    if (srcIdx < (int)codes.size()) {
-      forecastWeatherCode[i] = codes[srcIdx].as<int>();
-      forecastPrecipProb[i] = precip[srcIdx].as<int>();
-    }
+  // set to -- entry 0 is midnight, entry 14 is 2pm, and so on. That lines up
+  // directly with our fixed hour-of-day LED numbering, so no offset
+  // calculation is needed: just copy each entry straight across.
+  for (int i = 0; i < FORECAST_HOURS && i < (int)codes.size(); i++) {
+    forecastWeatherCode[i] = codes[i].as<int>();
+    forecastPrecipProb[i] = precip[i].as<int>();
+    forecastTempC[i] = temps[i].as<float>();
   }
 
   lastWeatherFetch = millis();
@@ -631,11 +684,12 @@ void renderClock(const struct tm& timeinfo, float subSec) {
   drawStep(MONTH_RING, timeinfo.tm_mon, monthC);
   drawStep(DAY_RING, timeinfo.tm_mday - 1, dayC);
 
-  // 24-hour forecast ring: each of the 24 LEDs represents one upcoming
-  // hour. The LED's color shows the weather condition; how bright that
-  // color is shows how likely rain is (map() rescales the 0-100% chance
-  // onto a 150-255 brightness range, so even a 0% chance still shows some
-  // color, rather than fading all the way to black).
+  // 24-hour forecast dial: LED i is always hour i of the day (fixed, so a
+  // printed "12am...10pm" bezel around this ring is permanently correct).
+  // The LED's color shows the weather condition; how bright that color is
+  // shows how likely rain is (map() rescales the 0-100% chance onto a
+  // 150-255 brightness range, so even a 0% chance still shows some color,
+  // rather than fading all the way to black).
   for (int i = 0; i < FORECAST_HOURS; i++) {
     if (forecastWeatherCode[i] < 0) continue;  // no data yet for this hour
     CRGB c = weatherCodeColor(forecastWeatherCode[i]);
@@ -644,6 +698,38 @@ void renderClock(const struct tm& timeinfo, float subSec) {
     c.nscale8_video(precipBrightness);
     c.nscale8_video(handBrightness);
     drawStep(FORECAST_RING, i, c);
+  }
+
+  // Hour-of-day pointer: a continuous sweep around the full 24-hour day
+  // (not just 12, so 2am and 2pm point at different places), showing where
+  // "right now" falls on the fixed forecast dial above. Deliberately a
+  // separate hand from HOUR_HAND_RING, which only sweeps a 12-hour face.
+  float hourOfDayFrac = (timeinfo.tm_hour + minWithinHour / 60.0f) / 24.0f;
+  CRGB pointerC = hourPointerColor;
+  pointerC.nscale8_video(handBrightness);
+  drawDot(HOUR_POINTER_RING, hourOfDayFrac, pointerC);
+
+  // Temperature gauge: a coarse bar-fill, like a thermometer. `fillFrac` is
+  // how far the current hour's temperature sits between the gauge's cold
+  // and hot ends (0.0 = at or below TEMP_GAUGE_MIN_C, 1.0 = at or above
+  // TEMP_GAUGE_MAX_C), and picks how many of the 8 LEDs light up. Each lit
+  // LED's own color comes from *its position* in the ring (LED 0 = blue,
+  // LED 7 = red, fixed regardless of temperature) rather than all sharing
+  // one color, so the gauge reads as a rainbow-style bar rather than a
+  // plain thermometer.
+  if (forecastWeatherCode[timeinfo.tm_hour] >= 0) {  // do we have data yet?
+    float fillFrac = (forecastTempC[timeinfo.tm_hour] - TEMP_GAUGE_MIN_C) /
+                      (TEMP_GAUGE_MAX_C - TEMP_GAUGE_MIN_C);
+    fillFrac = constrain(fillFrac, 0.0f, 1.0f);
+
+    int tempRingSize = ALL_RINGS[TEMP_RING].size;
+    int litCount = (int)roundf(fillFrac * tempRingSize);
+    for (int j = 0; j < litCount; j++) {
+      uint8_t posRatio = (uint8_t)roundf(255.0f * j / (tempRingSize - 1));
+      CRGB tempC = blend(CRGB(0, 80, 255), CRGB(255, 30, 0), posRatio);
+      tempC.nscale8_video(handBrightness);
+      drawStep(TEMP_RING, j, tempC);
+    }
   }
 
   // The center LED is always at least dimly lit, and pulses brighter once
@@ -691,10 +777,8 @@ void setup() {
   }
   Serial.println("\nTime synced.");
 
-  // Fetch the first forecast now that we know the correct current time --
-  // fetchWeather() needs an accurate "current hour" to know which part of
-  // the API's response is relevant, so this must happen after NTP sync
-  // above, not before.
+  // Fetch the first forecast so the ring isn't blank until the next
+  // scheduled refresh.
   fetchWeather();
 }
 

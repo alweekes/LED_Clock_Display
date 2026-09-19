@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.0] - 2026-09-19
+
+### Changed
+- Weather forecast ring (ring 5) reverts from an hour-hand-aligned rotating
+  layout back to a **fixed 24-hour-of-day dial**: LED 0 is always midnight,
+  LED 23 always 11pm, regardless of the current time. This makes it
+  bezel-printable ("12am...10pm" at fixed positions), which the rotating
+  version couldn't be, since its LED-to-hour mapping moved continuously.
+- Weather condition colors replaced with a smaller set of maximally
+  distinct hues (yellow/green/blue/white/magenta) rather than one shade per
+  WMO sub-category. The previous palette used three different greys and
+  three different blues; on an RGB LED, "grey" (equal R/G/B) just reads as
+  dim white, which was easy to confuse with the snow color.
+
+### Added
+- Hour-of-day pointer (ring 6, previously unused): a continuous sweep over
+  the full 24-hour day, showing where "now" falls on the fixed forecast
+  dial above. Deliberately separate from the (12-hour) hour hand, so 2am
+  and 2pm read differently.
+- Temperature gauge (ring 8, previously unused): a coarse 8-LED bar-fill
+  gauge (-5C to 35C, ~5C per LED), each LED colored by its fixed position
+  in a blue-to-red gradient; the fill count (not the color) shows the
+  reading. Uses the `temperature_2m` field from the same Open-Meteo
+  request.
+- Hour-of-day pointer color field in the web UI.
+
 ## [1.0.0] - 2026-09-14
 
 First tagged release. Summary of the feature set as of this point:

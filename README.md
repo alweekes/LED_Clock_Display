@@ -1,13 +1,15 @@
 # LED Clock Display
 
 An analog-style clock rendered on a 241-LED WS2812B concentric-ring panel,
-driven by an ESP32. Hour, minute, and second "hands" are drawn as single
-LEDs sweeping continuously around dedicated rings, while month, day-of-month,
-and a 24-hour weather forecast are drawn as fixed integer steps on three more
-rings — intended to line up with printed numbers on a 3D-printed bezel. WiFi
-and timezone are configured from a phone via a captive portal, time is kept
-via NTP, weather comes from a free API, and colors/brightness/location are
-adjustable live from a web page.
+driven by an ESP32. Hour, minute, and second "hands" sweep continuously
+around dedicated rings, while month and day-of-month are fixed integer
+steps on two more rings — intended to line up with printed numbers on a
+3D-printed bezel. A weather forecast ring shows a fixed 24-hour-of-day dial
+(also bezel-printable) with its own hour-of-day pointer, and a coarse
+gradient bar-gauge shows the current temperature. WiFi and timezone are
+configured from a phone via a captive portal, time is kept via NTP, weather
+comes from a free API, and colors/brightness/location are adjustable live
+from a web page.
 
 See [`TRANSCRIPT.md`](TRANSCRIPT.md) for the full story of how this was
 built (including the hardware detective work to figure out the panel's
@@ -17,7 +19,7 @@ wiring layout).
 
 ![Ring map: the panel's 8 concentric rings and center dot, showing each ring's LED count, assigned role, and an example lit state](docs/ring-map.svg)
 
-*Fig. 1 — wiring order runs outer to inner (index 0 lands on the same spoke on every ring). Illustrated at 10:09:24, September 13 — not live data.*
+*Fig. 1 — wiring order runs outer to inner (index 0 lands on the same spoke on every ring). Illustrated at 10:09:24, September 13, 20&deg;C — not live data.*
 
 - **MCU**: ESP32-WROOM-32 DevKitC-style dev board (30-pin, no PSRAM)
 - **LED panel**: WS2812B (5050 RGB) addressable LED ring panel, 241 pixels
@@ -25,27 +27,40 @@ wiring layout).
   inner as a single data chain (each ring fully traversed before the chain
   continues to the next ring inward):
 
-  | Ring            | LEDs | Role                    | Mode                        |
-  |-----------------|-----:|--------------------------|------------------------------|
-  | 1 (outermost)   | 60   | Second hand              | Continuous sweep             |
-  | 2               | 48   | Hour hand                | Continuous sweep             |
-  | 3               | 40   | Minute hand              | Continuous sweep             |
-  | 4               | 32   | Day of month             | Discrete step (31/32 used)   |
-  | 5               | 24   | 24-hour weather forecast | Data-driven, 1 hour/LED      |
-  | 6               | 16   | *unused*                 | —                             |
-  | 7               | 12   | Month                    | Discrete step (12/12 used)   |
-  | 8 (innermost)   | 8    | *unused*                 | —                             |
-  | Center          | 1    | Heartbeat                | Pulses once per second       |
-  | **Total**       | **241** |                       |                               |
+  | Ring            | LEDs | Role                    | Mode                          |
+  |-----------------|-----:|--------------------------|-------------------------------|
+  | 1 (outermost)   | 60   | Second hand              | Continuous sweep              |
+  | 2               | 48   | Hour hand                | Continuous sweep (12h face)   |
+  | 3               | 40   | Minute hand              | Continuous sweep              |
+  | 4               | 32   | Day of month             | Discrete step (31/32 used)    |
+  | 5               | 24   | Weather forecast         | Fixed 24-hour-of-day dial     |
+  | 6               | 16   | Hour-of-day pointer      | Continuous sweep (24h)        |
+  | 7               | 12   | Month                    | Discrete step (12/12 used)    |
+  | 8 (innermost)   | 8    | Temperature              | Gradient bar-fill gauge       |
+  | Center          | 1    | Heartbeat                | Pulses once per second        |
+  | **Total**       | **241** |                       |                                |
 
   Ring 1 being exactly 60 LEDs gives the second hand a satisfying 1:1
   mapping, though the hands actually render as a continuous sub-pixel
-  position, not a fixed step. Month and day, by contrast, are rendered as
-  an **exact integer LED index** with no anti-aliasing — ring 7 (12 LEDs)
-  is an exact fit for the months, and ring 4 (32 LEDs) is the closest fit
-  for day-of-month (index 31, the 32nd LED, simply never lights). This
-  matters if you're 3D-printing a bezel with fixed printed numbers: each
+  position, not a fixed step. Month, day, and the forecast ring, by
+  contrast, are rendered as an **exact integer LED index** with no
+  anti-aliasing — ring 7 (12 LEDs) is an exact fit for the months, ring 4
+  (32 LEDs) is the closest fit for day-of-month (index 31, the 32nd LED,
+  simply never lights), and ring 5 (24 LEDs) is an exact 1-LED-per-hour fit
+  for a full day (LED 0 = midnight, LED 23 = 11pm, always — never
+  "N hours from now", which would need to keep moving). This matters if
+  you're 3D-printing a bezel with fixed printed numbers or hour marks: each
   step must land on the same physical LED every time.
+
+  Since the forecast ring's own position is fixed, ring 6 carries a
+  separate continuous-sweep pointer across the full 24-hour day (not just
+  12, so 2am and 2pm point at different places) showing where "now" falls
+  on that dial.
+
+  Ring 8 is a fourth kind of thing again: a coarse bar-graph gauge for the
+  current temperature (-5C to 35C, ~5C per LED), each of the 8 LEDs colored
+  by its fixed position in a blue-to-red gradient, with the fill count —
+  not the color — showing the reading.
 
 ## Wiring
 
@@ -90,7 +105,22 @@ dependencies (see `platformio.ini`):
 
 Weather comes from [Open-Meteo](https://open-meteo.com/) (free, no API key)
 based on the latitude/longitude set in the web UI, refreshed every 15
-minutes or immediately when the location is changed.
+minutes or immediately when the location is changed. Each forecast hour's
+LED color encodes its condition (a small set of maximally-distinct hues,
+chosen because equal R/G/B on an LED just reads as dim white rather than a
+true "grey" — see `weatherCodeColor()` in `src/main.cpp`):
+
+| Condition                     | Color            |
+|--------------------------------|-----------------|
+| Clear sky                      | Yellow            |
+| Cloudy / overcast / fog        | Green             |
+| Drizzle / rain / rain showers  | Blue              |
+| Snow / snow showers            | White             |
+| Thunderstorm                   | Magenta           |
+
+Brightness of each hour's LED is separate — scaled by that hour's chance of
+rain, so a bright rain-colored LED means "raining and confident," a dim one
+means low confidence either way.
 
 ### Build & flash
 
@@ -120,6 +150,7 @@ device's IP, printed over serial at boot) for a page to set:
 
 - Hour, minute, and second hand colors
 - Month and day indicator colors
+- Hour-of-day pointer color
 - Brightness (applied to all of the above)
 - Weather latitude/longitude
 

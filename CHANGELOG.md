@@ -5,7 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Center heartbeat LED now respects the brightness slider (`handBrightness`)
+  like every other ring. It was previously always drawn at raw full
+  strength (60-255), ignoring the web UI's brightness setting.
+
 ### Changed
+- Documented the as-built bezel labeling: the weather color legend went on
+  ring 5 instead of hour numbers, so ring 6 carries the printed 24-hour
+  timing markers instead (both rings still cover the same fixed 0-23
+  layout underneath — only the printed labels moved).
 - Temperature gauge (ring 8) fill math switched from rounding to
   truncation, so each LED gets an exact whole-number "on" threshold
   instead of the old half-degree offsets (2.5, 7.5, ...) — cheaper to

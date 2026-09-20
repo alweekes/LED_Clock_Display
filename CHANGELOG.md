@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.2.0] - 2026-09-20
 
 ### Fixed
 - Center heartbeat LED now respects the brightness slider (`handBrightness`)

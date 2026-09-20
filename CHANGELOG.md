@@ -6,13 +6,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Changed
-- Temperature gauge (ring 8) range changed from -5&deg;C&ndash;35&deg;C to
-  **0&deg;C&ndash;40&deg;C**, and the fill math switched from rounding to
-  truncation. Together these give each LED an exact whole-number "on"
-  threshold (5, 10, 15, ... 40&deg;C) instead of the old half-degree
-  offsets (2.5, 7.5, ...) — cheaper to label on a printed bezel, at the
-  cost of no longer distinguishing sub-zero readings (anything at or
-  below 5&deg;C now shows an empty gauge).
+- Temperature gauge (ring 8) fill math switched from rounding to
+  truncation, so each LED gets an exact whole-number "on" threshold
+  instead of the old half-degree offsets (2.5, 7.5, ...) — cheaper to
+  label on a printed bezel.
+- Temperature gauge range settled at **-5&deg;C to 35&deg;C** (5&deg;C per
+  LED, thresholds 0, 5, 10, ... 35), after briefly trying 0&deg;C&ndash;40&deg;C
+  and shifting back down to restore headroom below freezing. Readings
+  below 0&deg;C still all show an empty gauge (no sub-zero resolution),
+  but the gauge at least registers "below freezing" starting from 0
+  rather than 5.
 
 ## [1.1.0] - 2026-09-19
 

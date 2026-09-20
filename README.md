@@ -58,7 +58,7 @@ wiring layout).
   on that dial.
 
   Ring 8 is a fourth kind of thing again: a coarse bar-graph gauge for the
-  current temperature (0C to 40C, 5C per LED), each of the 8 LEDs colored
+  current temperature (-5C to 35C, 5C per LED), each of the 8 LEDs colored
   by its fixed position in a blue-to-red gradient, with the fill count —
   not the color — showing the reading.
 
@@ -125,26 +125,25 @@ means low confidence either way.
 The temperature gauge (ring 8) works differently: each LED's color is fixed
 by its position in a blue-to-red gradient and never changes, while the
 *count* of lit LEDs shows the current reading — a bar-fill, not a single
-moving indicator. The gauge spans 0&deg;C to 40&deg;C (5&deg;C per LED, see
+moving indicator. The gauge spans -5&deg;C to 35&deg;C (5&deg;C per LED, see
 `TEMP_GAUGE_MIN_C`/`TEMP_GAUGE_MAX_C` in `src/main.cpp`); it's a fill gauge,
 so a given LED is only lit once every LED before it (colder) is also lit.
-Thresholds are exact whole numbers (no fractional or negative labels needed
-on a bezel):
+Thresholds are exact whole numbers (no fractional labels needed on a
+bezel):
 
 | LED (cold end &rarr; hot end) | Color                | Lit once temperature reaches |
 |---:|-----------------------|------:|
-| 0  | `#0050FF` blue         | 5&deg;C  |
-| 1  | `#2449DB`               | 10&deg;C |
-| 2  | `#4942B6`               | 15&deg;C |
-| 3  | `#6D3B92`               | 20&deg;C |
-| 4  | `#92336D`               | 25&deg;C |
-| 5  | `#B62C49`               | 30&deg;C |
-| 6  | `#DB2524`               | 35&deg;C |
-| 7  | `#FF1E00` red           | 40&deg;C |
+| 0  | `#0050FF` blue         | 0&deg;C  |
+| 1  | `#2449DB`               | 5&deg;C  |
+| 2  | `#4942B6`               | 10&deg;C |
+| 3  | `#6D3B92`               | 15&deg;C |
+| 4  | `#92336D`               | 20&deg;C |
+| 5  | `#B62C49`               | 25&deg;C |
+| 6  | `#DB2524`               | 30&deg;C |
+| 7  | `#FF1E00` red           | 35&deg;C |
 
-At or below 5&deg;C no LEDs light (this includes 0&deg;C and anything
-colder — the gauge doesn't distinguish sub-zero readings); at or above
-40&deg;C all 8 are lit.
+Below 0&deg;C no LEDs light (the gauge doesn't distinguish how far below
+freezing it is); at or above 35&deg;C all 8 are lit.
 
 ### Build & flash
 

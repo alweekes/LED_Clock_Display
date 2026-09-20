@@ -500,10 +500,11 @@ unsigned long lastWeatherFetch = 0;
 
 // Range the temperature gauge (ring 8) covers -- outside this range, it just
 // shows fully empty or fully lit rather than a specific reading. Chosen as a
-// clean 0-40C so each of the 8 LEDs represents an exact 5C step (0, 5, 10,
-// ... 40) with no fractional or negative numbers to print on a bezel.
-#define TEMP_GAUGE_MIN_C 0.0f
-#define TEMP_GAUGE_MAX_C 40.0f
+// clean -5 to 35C so each of the 8 LEDs represents an exact 5C step (0, 5,
+// 10, ... 35) with no fractional numbers to print on a bezel, while still
+// leaving headroom below freezing.
+#define TEMP_GAUGE_MIN_C -5.0f
+#define TEMP_GAUGE_MAX_C 35.0f
 
 // Turns a weather condition code from the forecast into a color for the
 // forecast ring. The codes themselves come from the WMO ("World

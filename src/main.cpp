@@ -499,9 +499,11 @@ unsigned long lastWeatherFetch = 0;
 #define WEATHER_FETCH_INTERVAL_MS (15UL * 60UL * 1000UL)  // 15 minutes, in milliseconds
 
 // Range the temperature gauge (ring 8) covers -- outside this range, it just
-// shows fully empty or fully lit rather than a specific reading.
-#define TEMP_GAUGE_MIN_C -5.0f
-#define TEMP_GAUGE_MAX_C 35.0f
+// shows fully empty or fully lit rather than a specific reading. Chosen as a
+// clean 0-40C so each of the 8 LEDs represents an exact 5C step (0, 5, 10,
+// ... 40) with no fractional or negative numbers to print on a bezel.
+#define TEMP_GAUGE_MIN_C 0.0f
+#define TEMP_GAUGE_MAX_C 40.0f
 
 // Turns a weather condition code from the forecast into a color for the
 // forecast ring. The codes themselves come from the WMO ("World
@@ -717,13 +719,18 @@ void renderClock(const struct tm& timeinfo, float subSec) {
   // LED 7 = red, fixed regardless of temperature) rather than all sharing
   // one color, so the gauge reads as a rainbow-style bar rather than a
   // plain thermometer.
+  //
+  // litCount is truncated (not rounded) so each LED's "on" threshold lands
+  // on an exact whole-number temperature -- 0, 5, 10, ... 40C -- rather than
+  // the half-degree offsets rounding would give (e.g. 2.5, 7.5). That keeps
+  // bezel labels to plain whole numbers.
   if (forecastWeatherCode[timeinfo.tm_hour] >= 0) {  // do we have data yet?
     float fillFrac = (forecastTempC[timeinfo.tm_hour] - TEMP_GAUGE_MIN_C) /
                       (TEMP_GAUGE_MAX_C - TEMP_GAUGE_MIN_C);
     fillFrac = constrain(fillFrac, 0.0f, 1.0f);
 
     int tempRingSize = ALL_RINGS[TEMP_RING].size;
-    int litCount = (int)roundf(fillFrac * tempRingSize);
+    int litCount = (int)(fillFrac * tempRingSize);
     for (int j = 0; j < litCount; j++) {
       uint8_t posRatio = (uint8_t)roundf(255.0f * j / (tempRingSize - 1));
       CRGB tempC = blend(CRGB(0, 80, 255), CRGB(255, 30, 0), posRatio);

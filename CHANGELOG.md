@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+- Temperature gauge (ring 8) range changed from -5&deg;C&ndash;35&deg;C to
+  **0&deg;C&ndash;40&deg;C**, and the fill math switched from rounding to
+  truncation. Together these give each LED an exact whole-number "on"
+  threshold (5, 10, 15, ... 40&deg;C) instead of the old half-degree
+  offsets (2.5, 7.5, ...) — cheaper to label on a printed bezel, at the
+  cost of no longer distinguishing sub-zero readings (anything at or
+  below 5&deg;C now shows an empty gauge).
+
 ## [1.1.0] - 2026-09-19
 
 ### Changed

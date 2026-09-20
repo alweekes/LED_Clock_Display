@@ -57,6 +57,17 @@ wiring layout).
   12, so 2am and 2pm point at different places) showing where "now" falls
   on that dial.
 
+  On the bezel used for this build, ring 5 is labeled with the weather
+  color legend (see the table below) rather than hour numbers, so ring 6
+  carries the printed 24-hour timing markers instead — both rings still
+  cover the same fixed 0-23 layout underneath, only the printed labels
+  moved. Timing markers go clockwise from the top (index 0): `12AM, 1AM,
+  2AM, ... 11AM` down to the bottom (`12PM`, opposite midnight), then
+  `1PM, 2PM, ... 11PM` back up to the top. Ring 6 only has 16 physical
+  LEDs for that same 24-position sweep (one LED per 1.5 hours), so the
+  continuous pointer lands *between* two LEDs at most hours rather than
+  exactly on a printed mark — expected, not a fault.
+
   Ring 8 is a fourth kind of thing again: a coarse bar-graph gauge for the
   current temperature (-5C to 35C, 5C per LED), each of the 8 LEDs colored
   by its fixed position in a blue-to-red gradient, with the fill count —

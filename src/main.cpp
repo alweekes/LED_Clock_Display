@@ -742,9 +742,13 @@ void renderClock(const struct tm& timeinfo, float subSec) {
 
   // The center LED is always at least dimly lit, and pulses brighter once
   // per second: brightest right as a new second begins (subSec near 0),
-  // fading back down as the second progresses (subSec approaching 1).
+  // fading back down as the second progresses (subSec approaching 1). Scaled
+  // by handBrightness like every other ring, so the brightness slider also
+  // dims the heartbeat instead of leaving it always at raw full strength.
   uint8_t pulse = (uint8_t)(60 + 195 * (1.0f - subSec));
-  leds[CENTER_INDEX] += CRGB(pulse, pulse, pulse);
+  CRGB heartbeatC = CRGB(pulse, pulse, pulse);
+  heartbeatC.nscale8_video(handBrightness);
+  leds[CENTER_INDEX] += heartbeatC;
 
   // Everything above only changed the `leds[]` array in the ESP32's memory
   // -- nothing on the physical panel updates until FastLED.show() sends

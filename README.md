@@ -190,6 +190,75 @@ device's IP, printed over serial at boot) for a page to set:
 
 Settings are saved to flash (NVS) and persist across reboots.
 
+## Software Flow
+
+How `src/main.cpp` actually runs, from power-on through the steady-state
+render loop:
+
+```mermaid
+flowchart TD
+    A["Power on / reset"] --> SETUP_START
+
+    subgraph SETUP["setup() -- runs once at boot"]
+        SETUP_START["Init FastLED: pin, LED count, clear panel"] --> LOADCFG["loadColorSettings() from NVS"]
+        LOADCFG --> WIFI["setupWiFi() via WiFiManager"]
+        WIFI --> WIFICHECK{"WiFi credentials already saved?"}
+        WIFICHECK -->|"no"| PORTAL["Start 'LED-Clock-Setup' captive portal,\nwait for phone/laptop to configure"]
+        PORTAL --> SAVECFG["Save WiFi + timezone to NVS"]
+        SAVECFG --> WEBSRV
+        WIFICHECK -->|"yes"| WEBSRV["setupWebServer(): start HTTP server + mDNS"]
+        WEBSRV --> NTPWAIT{"getLocalTime() succeeds?"}
+        NTPWAIT -->|"no, retry every 500ms"| NTPWAIT
+        NTPWAIT -->|"yes"| FIRSTFETCH["fetchWeather(): initial forecast"]
+    end
+
+    FIRSTFETCH --> LOOP_START
+
+    subgraph LOOP["loop() -- repeats forever"]
+        LOOP_START["webServer.handleClient()"] --> WXDUE{"Weather due?\n(15 min elapsed, or\nlocation just changed)"}
+        WXDUE -->|"yes"| FETCHWX["fetchWeather()"]
+        WXDUE -->|"no"| REDRAWDUE
+        FETCHWX --> REDRAWDUE{"10ms elapsed since\nlast redraw?"}
+        REDRAWDUE -->|"yes"| GETTIME["Read time + sub-second fraction\nvia gettimeofday()"]
+        GETTIME --> RENDER_START["renderClock()"]
+        REDRAWDUE -->|"no"| SERIALCHECK
+        RENDER_START --> SERIALCHECK{"Serial command\n'resetwifi'?"}
+        SERIALCHECK -->|"yes"| RESETWIFI["Clear saved WiFi, restart board"]
+        SERIALCHECK -->|"no"| LOOP_START
+    end
+
+    subgraph RENDER["renderClock() -- draws one frame"]
+        R1["Clear all LEDs to black"] --> R2["Draw hour / minute / second hands\n(continuous sweep)"]
+        R2 --> R3["Draw month + day-of-month\n(fixed discrete steps)"]
+        R3 --> R4["Draw 24-hour forecast dial\n(color = condition, brightness = rain %)"]
+        R4 --> R5["Draw hour-of-day pointer\n(continuous 24h sweep)"]
+        R5 --> R6["Draw temperature gauge\n(gradient bar-fill)"]
+        R6 --> R7["Draw center heartbeat pulse\n(brightness-scaled)"]
+        R7 --> R8["FastLED.show(): push frame to physical LEDs"]
+    end
+    RENDER_START -.-> R1
+
+    subgraph WEATHER["fetchWeather()"]
+        W1["Build Open-Meteo URL from saved lat/lon"] --> W2["HTTPS GET request"]
+        W2 --> W3["Parse JSON body with ArduinoJson"]
+        W3 --> W4["Store 24h weather code / rain % / temp arrays"]
+    end
+    FIRSTFETCH -.-> W1
+    FETCHWX -.-> W1
+```
+
+A few things worth calling out:
+
+- `setup()` **blocks** at two points: waiting for `WiFiManager` to connect
+  (or for you to configure it via the captive portal), and waiting for the
+  first NTP time sync. Nothing else runs until both succeed.
+- `loop()` never blocks. The web server, weather refresh, and LED redraw are
+  each gated by their own "is it time yet?" check, so one slow operation
+  (like an HTTP request) doesn't stall the others for long.
+- `renderClock()` redraws the **entire** panel from black every frame rather
+  than tracking and updating only the LEDs that changed — simpler to reason
+  about, and cheap enough at 241 LEDs.
+
 ## Repo layout
 
 ```

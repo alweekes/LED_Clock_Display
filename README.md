@@ -197,6 +197,9 @@ device's IP, printed over serial at boot) for a page to set:
 - Month and day indicator colors
 - Hour-of-day pointer color
 - Brightness (applied to all of the above)
+- Auto-dim overnight (on/off toggle; dims to ~25% of the configured
+  brightness between 10pm and 7am, fixed in `src/main.cpp` rather than
+  user-adjustable from the page)
 - Weather latitude/longitude
 
 Settings are saved to flash (NVS) and persist across reboots.

@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Auto-dim overnight: an on/off toggle in the web UI that, when enabled,
+  scales brightness down to ~25% between 10pm and 7am on top of whatever
+  brightness is configured. The schedule and dim level are fixed constants
+  in `src/main.cpp` (`AUTO_DIM_START_HOUR`/`AUTO_DIM_END_HOUR`/
+  `AUTO_DIM_SCALE`), not exposed in the web page.
+
 ### Changed
 - NTP time sync now tries the local GPS-disciplined time server
   (`192.168.1.40`) first, falling back to `pool.ntp.org` then

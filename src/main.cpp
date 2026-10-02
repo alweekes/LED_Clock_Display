@@ -207,8 +207,16 @@ CRGB monthColor(200, 120, 0);   // amber
 CRGB dayColor(0, 150, 150);     // teal
 CRGB hourPointerColor(200, 200, 200);  // pale white
 uint8_t handBrightness = 255;
+bool autoDimEnabled = false;   // dim automatically overnight when turned on
 float weatherLat = 51.5074;   // default: London
 float weatherLon = -0.1278;
+
+// The night window and dim level auto-dim uses when it's turned on. Not
+// exposed in the web UI (just the on/off toggle is) -- change these and
+// reflash if you want a different schedule or dim amount.
+#define AUTO_DIM_START_HOUR 22  // 10pm
+#define AUTO_DIM_END_HOUR 7     // 7am
+#define AUTO_DIM_SCALE 64        // ~25% of the configured brightness, 0-255
 
 // ---- Small helpers for converting colors to/from the forms we need to
 // ---- store them (a single number) or show them in a web page ("#rrggbb").
@@ -259,6 +267,7 @@ void loadColorSettings() {
   hourPointerColor =
       unpackColor(prefs.getUInt("hpRGB", packColor(hourPointerColor)));
   handBrightness = prefs.getUChar("handBri", handBrightness);
+  autoDimEnabled = prefs.getBool("autoDim", autoDimEnabled);
   weatherLat = prefs.getFloat("wLat", weatherLat);
   weatherLon = prefs.getFloat("wLon", weatherLon);
   prefs.end();
@@ -275,6 +284,7 @@ void saveColorSettings() {
   prefs.putUInt("dayRGB", packColor(dayColor));
   prefs.putUInt("hpRGB", packColor(hourPointerColor));
   prefs.putUChar("handBri", handBrightness);
+  prefs.putBool("autoDim", autoDimEnabled);
   prefs.putFloat("wLat", weatherLat);
   prefs.putFloat("wLon", weatherLon);
   prefs.end();
@@ -300,6 +310,8 @@ input[type=color]{width:100%;height:44px;border:none;background:none;margin-top:
 input[type=range]{width:100%;margin-top:6px}
 input[type=number]{width:100%;padding:8px;margin-top:6px;background:#222;color:#eee;border:1px solid #444;border-radius:4px;box-sizing:border-box}
 .row{display:flex;justify-content:space-between;align-items:center}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-weight:normal}
+.checkbox-row input{width:auto;margin:0}
 button{margin-top:24px;width:100%;padding:12px;font-size:1em;background:#3a7;
   color:#fff;border:none;border-radius:6px}
 </style></head><body>
@@ -319,6 +331,9 @@ button{margin-top:24px;width:100%;padding:12px;font-size:1em;background:#3a7;
 <input type="color" name="hourPointerColor" value="%HOUR_POINTER_COLOR%"></label>
 <label>Brightness
 <input type="range" name="handBrightness" min="0" max="255" value="%HAND_BRI%"></label>
+<label class="checkbox-row" style="margin-top:18px">
+<input type="checkbox" name="autoDimEnabled" %AUTO_DIM_CHECKED%>
+Auto-dim overnight (10pm&ndash;7am)</label>
 <label>Weather latitude
 <input type="number" step="0.0001" name="weatherLat" value="%WEATHER_LAT%"></label>
 <label>Weather longitude
@@ -340,6 +355,7 @@ void handleRoot() {
   page.replace("%DAY_COLOR%", colorToHex(dayColor));
   page.replace("%HOUR_POINTER_COLOR%", colorToHex(hourPointerColor));
   page.replace("%HAND_BRI%", String(handBrightness));
+  page.replace("%AUTO_DIM_CHECKED%", autoDimEnabled ? "checked" : "");
   page.replace("%WEATHER_LAT%", String(weatherLat, 4));
   page.replace("%WEATHER_LON%", String(weatherLon, 4));
   webServer.send(200, "text/html", page);  // 200 = the standard "OK" HTTP status
@@ -364,6 +380,10 @@ void handleSave() {
   hourPointerColor =
       hexToColor(webServer.arg("hourPointerColor"), hourPointerColor);
   handBrightness = (uint8_t)webServer.arg("handBrightness").toInt();
+  // A checkbox is only included in the submitted form data when it's
+  // checked -- an unchecked box sends nothing at all, rather than "false".
+  // hasArg() (present/absent) is therefore the right check here, not arg().
+  autoDimEnabled = webServer.hasArg("autoDimEnabled");
 
   float newLat = webServer.arg("weatherLat").toFloat();
   float newLon = webServer.arg("weatherLon").toFloat();
@@ -662,6 +682,21 @@ void renderClock(const struct tm& timeinfo, float subSec) {
   // only the LEDs that changed since last time.
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 
+  // When auto-dim is on, everything below gets scaled down further during
+  // the overnight window, on top of whatever brightness is configured.
+  // Computed once here and used everywhere handBrightness would otherwise
+  // be used directly, so every ring dims the same way.
+  uint8_t effectiveBrightness = handBrightness;
+  if (autoDimEnabled) {
+    int h = timeinfo.tm_hour;
+    bool isNight = (AUTO_DIM_START_HOUR > AUTO_DIM_END_HOUR)
+                       ? (h >= AUTO_DIM_START_HOUR || h < AUTO_DIM_END_HOUR)
+                       : (h >= AUTO_DIM_START_HOUR && h < AUTO_DIM_END_HOUR);
+    if (isNight) {
+      effectiveBrightness = scale8(handBrightness, AUTO_DIM_SCALE);
+    }
+  }
+
   // Work out how far around each hand's ring it should be, as a fraction
   // from 0.0 to 1.0 (see drawDot() above for what that fraction means).
   float secWithinMin = timeinfo.tm_sec + subSec;            // 0.0 to 60.0
@@ -679,20 +714,20 @@ void renderClock(const struct tm& timeinfo, float subSec) {
   // color down to fully off -- useful so a low brightness setting still
   // shows *something* rather than disappearing entirely.
   CRGB hourC = hourColor;
-  hourC.nscale8_video(handBrightness);
+  hourC.nscale8_video(effectiveBrightness);
   CRGB minuteC = minuteColor;
-  minuteC.nscale8_video(handBrightness);
+  minuteC.nscale8_video(effectiveBrightness);
   CRGB secondC = secondColor;
-  secondC.nscale8_video(handBrightness);
+  secondC.nscale8_video(effectiveBrightness);
 
   drawDot(HOUR_HAND_RING, hourFrac, hourC);
   drawDot(MINUTE_HAND_RING, minFrac, minuteC);
   drawDot(SECOND_HAND_RING, secFrac, secondC);
 
   CRGB monthC = monthColor;
-  monthC.nscale8_video(handBrightness);
+  monthC.nscale8_video(effectiveBrightness);
   CRGB dayC = dayColor;
-  dayC.nscale8_video(handBrightness);
+  dayC.nscale8_video(effectiveBrightness);
 
   // tm_mon already counts 0=January..11=December, which conveniently
   // matches drawStep()'s 0-based LED numbering directly. tm_mday counts
@@ -712,7 +747,7 @@ void renderClock(const struct tm& timeinfo, float subSec) {
     uint8_t precipBrightness =
         map(forecastPrecipProb[i], 0, 100, 150, 255);
     c.nscale8_video(precipBrightness);
-    c.nscale8_video(handBrightness);
+    c.nscale8_video(effectiveBrightness);
     drawStep(FORECAST_RING, i, c);
   }
 
@@ -722,7 +757,7 @@ void renderClock(const struct tm& timeinfo, float subSec) {
   // separate hand from HOUR_HAND_RING, which only sweeps a 12-hour face.
   float hourOfDayFrac = (timeinfo.tm_hour + minWithinHour / 60.0f) / 24.0f;
   CRGB pointerC = hourPointerColor;
-  pointerC.nscale8_video(handBrightness);
+  pointerC.nscale8_video(effectiveBrightness);
   drawDot(HOUR_POINTER_RING, hourOfDayFrac, pointerC);
 
   // Temperature gauge: a coarse bar-fill, like a thermometer. `fillFrac` is
@@ -748,7 +783,7 @@ void renderClock(const struct tm& timeinfo, float subSec) {
     for (int j = 0; j < litCount; j++) {
       uint8_t posRatio = (uint8_t)roundf(255.0f * j / (tempRingSize - 1));
       CRGB tempC = blend(CRGB(0, 80, 255), CRGB(255, 30, 0), posRatio);
-      tempC.nscale8_video(handBrightness);
+      tempC.nscale8_video(effectiveBrightness);
       drawStep(TEMP_RING, j, tempC);
     }
   }
@@ -760,7 +795,7 @@ void renderClock(const struct tm& timeinfo, float subSec) {
   // dims the heartbeat instead of leaving it always at raw full strength.
   uint8_t pulse = (uint8_t)(60 + 195 * (1.0f - subSec));
   CRGB heartbeatC = CRGB(pulse, pulse, pulse);
-  heartbeatC.nscale8_video(handBrightness);
+  heartbeatC.nscale8_video(effectiveBrightness);
   leds[CENTER_INDEX] += heartbeatC;
 
   // Everything above only changed the `leds[]` array in the ESP32's memory

@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.3.0] - 2026-10-02
 
 ### Added
 - Auto-dim overnight: an on/off toggle in the web UI that, when enabled,
@@ -11,6 +11,14 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   brightness is configured. The schedule and dim level are fixed constants
   in `src/main.cpp` (`AUTO_DIM_START_HOUR`/`AUTO_DIM_END_HOUR`/
   `AUTO_DIM_SCALE`), not exposed in the web page.
+- [`docs/flashing-troubleshooting.md`](docs/flashing-troubleshooting.md):
+  a full write-up of why automated flashing is unreliable on this
+  specific board (a marginal auto-reset circuit, diagnosed down to an
+  oscilloscope-confirmed ambiguous "half-rail" EN release), and why
+  manual BOOT+EN flashing is the practical answer rather than a
+  software/timing workaround.
+- A Mermaid software-flow diagram in the README, covering `setup()`,
+  `loop()`, `renderClock()`, and `fetchWeather()`.
 
 ### Changed
 - NTP time sync now tries the local GPS-disciplined time server
@@ -27,14 +35,6 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   jumping to the "3" position at 2:52:30 instead of 3:00. Affected the
   minute/second hands and hour-of-day pointer too, just less noticeably,
   since their steps are smaller slices of time.
-
-### Added
-- [`docs/flashing-troubleshooting.md`](docs/flashing-troubleshooting.md):
-  a full write-up of why automated flashing is unreliable on this
-  specific board (a marginal auto-reset circuit, diagnosed down to an
-  oscilloscope-confirmed ambiguous "half-rail" EN release), and why
-  manual BOOT+EN flashing is the practical answer rather than a
-  software/timing workaround.
 
 ## [1.2.0] - 2026-09-20
 

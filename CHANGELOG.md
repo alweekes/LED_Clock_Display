@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- NTP time sync now tries the local GPS-disciplined time server
+  (`192.168.1.40`) first, falling back to `pool.ntp.org` then
+  `time.nist.gov` if it's unreachable -- previously went straight to the
+  internet servers.
+
 ### Fixed
 - `drawDot()` (the hour/minute/second hands and the hour-of-day pointer)
   switched from rounding to the nearest LED to flooring. Rounding made each

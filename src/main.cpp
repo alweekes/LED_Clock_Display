@@ -456,8 +456,11 @@ void saveConfigCallback() {
   prefs.putString("tz", tzString);
   prefs.end();
   // configTzTime() tells the ESP32's internal clock which timezone rules to
-  // use once it syncs with an internet time server (NTP), further down.
-  configTzTime(tzString.c_str(), "pool.ntp.org", "time.nist.gov");
+  // use once it syncs with an NTP time server, further down. The local GPS
+  // time server is tried first (lowest latency, and GPS-disciplined so it's
+  // at least as accurate as the internet fallbacks); pool.ntp.org and
+  // time.nist.gov are only used if it's ever unreachable.
+  configTzTime(tzString.c_str(), "192.168.1.40", "pool.ntp.org", "time.nist.gov");
 }
 
 // Connects to WiFi, or -- if no WiFi details have been saved yet -- puts the
@@ -488,7 +491,7 @@ void setupWiFi() {
     ESP.restart();
   }
 
-  configTzTime(tzString.c_str(), "pool.ntp.org", "time.nist.gov");
+  configTzTime(tzString.c_str(), "192.168.1.40", "pool.ntp.org", "time.nist.gov");
 }
 
 // -----------------------------------------------------------------------

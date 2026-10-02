@@ -178,7 +178,12 @@ point named **`LED-Clock-Setup`**. Connect to it from a phone or laptop; a
 captive portal should open automatically (or browse to `192.168.4.1`) with
 fields for your WiFi SSID/password and a POSIX timezone string (defaults to
 `GMT0BST,M3.5.0/1,M10.5.0`, i.e. Europe/London with DST). Once saved, the
-device reboots, joins your network, and syncs time via NTP.
+device reboots, joins your network, and syncs time via NTP: the local
+GPS-disciplined time server at `192.168.1.40` is tried first (lowest
+latency, and at least as accurate as the internet alternatives), falling
+back to `pool.ntp.org` then `time.nist.gov` if it's ever unreachable. Once
+synced, the ESP32's SNTP client re-syncs automatically in the background
+roughly once an hour for as long as the device stays powered.
 
 To clear stored WiFi credentials and re-run setup, send `resetwifi` over
 the serial monitor.

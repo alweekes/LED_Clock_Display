@@ -1,5 +1,7 @@
 # LED Clock Display
 
+![The finished clock, 3D-printed bezel lit up, showing the hour/minute/second hands, month/day indicators, weather forecast ring with its color legend, and temperature gauge](docs/photos/front-lit.jpg)
+
 An analog-style clock rendered on a 241-LED WS2812B concentric-ring panel,
 driven by an ESP32. Hour, minute, and second "hands" sweep continuously
 around dedicated rings, while month and day-of-month are fixed integer

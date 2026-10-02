@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+- `drawDot()` (the hour/minute/second hands and the hour-of-day pointer)
+  switched from rounding to the nearest LED to flooring. Rounding made each
+  hand light its next LED once it was more than halfway through that LED's
+  time step rather than when it actually arrived -- most visible on the
+  hour hand, where each of its 48 LEDs spans 15 real minutes: it was
+  jumping to the "3" position at 2:52:30 instead of 3:00. Affected the
+  minute/second hands and hour-of-day pointer too, just less noticeably,
+  since their steps are smaller slices of time.
+
 ## [1.2.0] - 2026-09-20
 
 ### Fixed

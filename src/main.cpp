@@ -404,7 +404,17 @@ void setupWebServer() {
 // `frac` is a number from 0.0 to 1.0 -- for example 0.25 means "a quarter
 // of the way around this ring". This is how the continuously-sweeping
 // hour/minute/second hands are drawn: as time passes, `frac` increases
-// smoothly, and this function works out the nearest whole LED to light.
+// smoothly, and this function works out which whole LED to light.
+//
+// Uses floor (via floorf()), not round-to-nearest: a hand should only land
+// on a given LED once time has actually reached that position, not up to
+// half a step early. Rounding to the *nearest* LED (as this used to do)
+// made the hour hand jump to the "3" position at 2:52:30 rather than 3:00
+// -- each of its 48 LEDs spans 15 real minutes, so rounding early by half a
+// step meant showing up to 7.5 minutes' worth of time that hadn't happened
+// yet. The same rounding affected the minute/second hands and the
+// hour-of-day pointer too, just less visibly, since their steps are much
+// smaller slices of time.
 //
 // `+=` (rather than `=`) is used so that if two things try to light the
 // same LED in the same frame, their colors add together instead of one
@@ -414,7 +424,7 @@ void drawDot(int ringIdx, float frac, CRGB color) {
   int start = ALL_RINGS[ringIdx].start;
   int size = ALL_RINGS[ringIdx].size;
 
-  int idx = ((int)roundf(frac * size)) % size;
+  int idx = ((int)floorf(frac * size)) % size;
   if (idx < 0) idx += size;  // keep the index positive even if frac was negative
 
   leds[start + idx] += color;

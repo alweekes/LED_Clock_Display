@@ -15,6 +15,14 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   minute/second hands and hour-of-day pointer too, just less noticeably,
   since their steps are smaller slices of time.
 
+### Added
+- [`docs/flashing-troubleshooting.md`](docs/flashing-troubleshooting.md):
+  a full write-up of why automated flashing is unreliable on this
+  specific board (a marginal auto-reset circuit, diagnosed down to an
+  oscilloscope-confirmed ambiguous "half-rail" EN release), and why
+  manual BOOT+EN flashing is the practical answer rather than a
+  software/timing workaround.
+
 ## [1.2.0] - 2026-09-20
 
 ### Fixed

@@ -165,6 +165,12 @@ pio run --target upload
 (`upload_port` in `platformio.ini` is hardcoded to `/dev/ttyUSB0` — adjust
 if your board enumerates elsewhere.)
 
+This specific board's auto-reset circuit is marginal and automated flashing
+reliably fails on it — hold **BOOT** and tap **EN** as the upload begins.
+See [`docs/flashing-troubleshooting.md`](docs/flashing-troubleshooting.md)
+for the full diagnosis (oscilloscope traces, root cause, why it can't be
+fixed from software).
+
 ### First boot
 
 On first boot (or after clearing WiFi settings), the ESP32 starts an access

@@ -478,3 +478,100 @@ manually) confirmed it dims correctly.
 
 **Assistant:** *(this section, appended to catch the transcript up through
 v1.2.0)*
+
+---
+
+**User:** Please can you create a graphical flow chart, showing the
+software function as part of the documentation
+
+**Assistant:** Added a Mermaid flowchart to the README covering `setup()`,
+`loop()`, `renderClock()`, and `fetchWeather()`, derived directly from the
+actual code structure (GitHub renders Mermaid fences natively, so no
+separate image-generation step was needed this time).
+
+**User:** I've spotted an issue with the LED clock, the hours LED
+illuminates before the time reaches the hour, i.e. at 14:55 the LED aligned
+with the 3 is on, the hours LED should only become illuminated on the hour
+- can you check.
+
+**Assistant:** Found the bug in `drawDot()`: it rounded to the *nearest*
+LED rather than flooring, so a hand lit its next LED once more than halfway
+through that LED's time step rather than when it actually arrived there.
+On the 48-LED hour ring (15 real minutes per LED), that meant the hour hand
+jumped to "3" at 2:52:30 instead of 3:00. Switched to `floorf()`, which
+fixed the hour hand and, less visibly, tightened up the minute/second hands
+and the hour-of-day pointer the same way.
+
+**User:** Before I flash can we try to resolve why you can't flash - at
+earlier times in this project you were able to, so something changed.
+
+**Assistant:** Agreed to properly diagnose it rather than keep working
+around it. Checked for the two most common Linux culprits first
+(`brltty`, `ModemManager` grabbing the serial port) — both inactive, ruled
+out. Bypassed esptool entirely and read raw bytes directly via `pyserial`
+to see what was actually happening on the wire.
+
+Found, in order:
+- A byte-level trace showed a tightly repeating, non-ASCII pattern right
+  after SYNC — turned out to be a large backlog of stale bytes sitting
+  unread in the kernel's serial buffer, not live noise.
+- Deliberately toggling DTR while reading raw serial text captured
+  WiFiManager's own debug log (`*wm:AutoConnect`, `*wm:STA IP Address:
+  192.168.1.60`) appearing right after a reset — proof the chip was
+  booting the normal application, not the ROM bootloader.
+- Tested whether DTR genuinely controls GPIO0 at all, in both polarities,
+  via a direct pyserial reset-and-read script -- it does (confirmed on an
+  oscilloscope later in the session too).
+
+**User:** *(inspected the board, found two populated SOT-23 transistors —
+the standard two-transistor auto-reset circuit appeared to be present, not
+missing)*
+
+**Assistant:** Revised the theory: since the parts are present, the
+remaining explanation had to be reset-sequence timing or signal level
+rather than missing wiring. Pulled esptool's actual `ClassicReset` /
+`UnixTightReset` source to get its exact DTR/RTS sequence and timing
+(`reset.py`), then replicated it precisely so the user could scope it.
+
+A long back-and-forth followed getting an analog oscilloscope set up and
+triggered on a fast, repeating replay of the sequence (an analog scope
+needs a continuously-repeating signal to hold a stable trace, unlike a
+single one-shot capture). Findings, each tested and ruled out in turn:
+
+- GPIO0 does toggle cleanly to 0V in sync with DTR (confirmed on scope).
+- Extending the gap between releasing EN and releasing GPIO0 up to 3
+  full seconds (via `esptool.cfg`'s `reset_delay`) made no difference --
+  ruling out simple timing/RC-settling mismatches.
+- The board's USB ID (`10c4:ea60`, plain CP2102) isn't the `CP2102C`
+  (`ea64`) esptool specifically flags for an RTS-stealing flow-control
+  bug -- not applicable here.
+- A raw capture immediately after a single deliberate reset pulse caught
+  the chip printing a *truncated* ROM boot banner over and over, dozens
+  of times in under a second, with no further commands issued --
+  pointing at genuine electrical instability around reset itself.
+- Putting the scope directly on EN was the breakthrough: holding GPIO0
+  low continuously while repeatedly pulsing EN (mimicking a manual
+  "hold BOOT, tap EN" by software) only pulled EN down to ~2.5V -- far
+  short of a clean reset level. Pulsing RTS alone (EN only, DTR left
+  idle) reached a clean 0V. Under esptool's actual stock sequence, EN
+  reached 0V but then rose in two visible stages -- 0V, an intermediate
+  "half-rail" plateau, then full 3.3V -- instead of one clean edge.
+
+**Assistant:** Concluded: the onboard two-transistor auto-reset circuit
+(DTR/RTS cross-coupled to drive EN and GPIO0, the standard ESP32 DevKitC
+reference design) produces an ambiguous, two-stage EN release rather than
+a clean edge. Exactly when the chip's internal logic treats reset as "over"
+during that half-rail plateau varies run to run, which is why automated
+flashing sometimes lands in the bootloader and usually doesn't -- a
+hardware characteristic of this board, not a wiring fault, timing bug, or
+esptool issue. A manual BOOT-button press works every time because it
+shorts GPIO0 straight to ground through a mechanical switch, sidestepping
+the ambiguous electrical state entirely.
+
+**User:** Document the finding, flash manually and then push to github
+with updated document and a transcript of the fault finding/diagnosis
+above
+
+**Assistant:** Wrote up the full diagnosis in
+[`docs/flashing-troubleshooting.md`](docs/flashing-troubleshooting.md),
+linked it from the README, updated `CHANGELOG.md`, and added this section.
